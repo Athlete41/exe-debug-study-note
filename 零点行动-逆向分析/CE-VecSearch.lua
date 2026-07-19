@@ -1,0 +1,280 @@
+-- ========== 配置 ==========
+-- 需要满足基本假设才可以使用: Vector 是三个连续的 float 并且以 x 为基地址
+
+local InputVecAddrStr = "client.dll + E0388"  -- 如果指定了地址，则用地址读出来的坐标, 否则用输入的坐标
+local InputPosition = {0, 0, 0}
+
+local FilterType = "Sphere" -- 搜索类型 "Sphere" | "Box"
+local FilterActive = false -- 是否启动, 启动后可能删除扫描列表的地址
+local VectorOffsetMode = "x" -- 向量偏移模式 "x" | "y" | "z"
+local ConditionInverse = false -- 条件反转
+
+local SphereCondition = {
+    minRange = 0,
+    maxRange = 100,
+}
+local BoxCondition = {
+    minV = {-5, -5, 0},
+    maxV = {5, 5, 5}
+}
+
+function getVectorByAddr(addr)
+    -- addr: String|Number - 向量的地址 (假设 Vector 是三个连续的float并且以 x 为基地址)
+    if type(addr) == "string" then
+        addr = getAddress(addr)
+    end
+
+    return readFloat(addr), readFloat(addr + 4), readFloat(addr + 8)
+end
+
+function AddVectorStruct(baseAddr, name)
+    -- baseAddr: String|Number - 向量的地址 (假设 Vector 是三个连续的float并且以 x 为基地址)
+    -- name: Any
+
+    if type(baseAddr) == "number" then
+        baseAddr = string.format("%X", baseAddr)
+    end
+
+    local list = getAddressList()
+
+    -- 占位符
+    local parent = list.createMemoryRecord("")
+    parent.Address = baseAddr
+    parent.Description = string.format("Vec-%s", name)
+    parent.Type = 0
+    
+    local childX = list.createMemoryRecord("")
+    childX.Description = "X"
+    childX.Address = "+0"
+    childX.Type = 4
+    childX.appendToEntry(parent)
+    
+    local childY = list.createMemoryRecord("")
+    childY.Description = "Y"
+    childY.Address = "+4"
+    childY.Type = 4
+    childY.appendToEntry(parent)
+    
+    local childZ = list.createMemoryRecord("")
+    childZ.Description = "Z"
+    childZ.Address = "+8"
+    childZ.Type = 4
+    childZ.appendToEntry(parent)
+end
+
+
+function getVectorOffset(mode)
+    if mode == "x" or mode == "X" then
+        return 0
+    elseif mode == "y" or mode == "Y" then
+        return -4
+    elseif mode == "z" or mode == "Z" then
+        return -8
+    else
+        print(string.format("错误：未知的偏移模式 \"%s\"", mode))
+        return 0
+    end
+end
+
+function SphereFilter(inputPos, minRange, maxRange, conditionInverse, mode, active)
+    -- inputPos: vector - 目标坐标
+    -- minRange: Number - 最小距离
+    -- maxRange: Number - 最大距离
+    -- conditionInverse: Boolean - 条件反转, true 表示取反
+    -- mode: String - 搜索模式，"x"、"y"、"z", 假设传入的地址可能不是x的地址，而是y的地址，z的地址，需要根据 mode 来偏移
+    -- active: Boolean - 是否启动, 启动后可能删除扫描列表的地址
+  
+    -- 获取扫描结果列表对象
+    local fl = getMainForm().Foundlist3
+
+    -- 查找右键菜单的"删除选中地址"
+    local miRemove = nil
+    for i = 0, fl.PopupMenu.Items.Count - 1 do
+        if fl.PopupMenu.Items[i].Name == "Removeselectedaddresses1" then
+            miRemove = fl.PopupMenu.Items[i]
+            break
+        end
+    end
+
+    if miRemove == nil then
+        print("错误：找不到 '删除选中地址' 菜单项")
+        return
+    end
+
+    local modeOffset = getVectorOffset(mode)
+    local count = fl.Items.Count
+    local inputX, inputY, inputZ = inputPos[1], inputPos[2], inputPos[3]
+
+    print("===== 开始球壳过滤 =====")
+    print(string.format("共 %d 个地址", count))    
+    print(string.format("目标: (%f, %f, %f)", inputX, inputY, inputZ))   
+    print(string.format("范围：%f ~ %f", minRange, maxRange))   
+    print(string.format("模式偏移：%d", modeOffset)) 
+    print(string.format("条件反转：%s", conditionInverse and "是" or "否"))
+
+    local skipedCount = 0
+    local deletedCount = 0
+    for i = 0, count - 1 do
+        local item = fl.Items[i]
+        local addrStr = item.Caption
+        local addr = getAddress(addrStr)
+
+        if addr then addr = addr + modeOffset end
+        if addr then
+            local x, y, z = getVectorByAddr(addr)
+
+            if x and y and z then
+                local dist = math.sqrt((x - inputX)^2 + (y - inputY)^2 + (z - inputZ)^2)
+                local hit = dist > minRange and dist < maxRange
+                if conditionInverse then hit = not hit end
+
+                if hit then
+                    item.Selected = false
+                else
+                    item.Selected = true
+                    deletedCount = deletedCount + 1
+                end
+            else
+                item.Selected = true
+                skipedCount = skipedCount + 1
+            end
+        else
+            item.Selected = true
+            skipedCount = skipedCount + 1
+        end
+    end
+
+    print(string.format("共跳过 %d 个地址, 不符合条件 %d 个地址", skipedCount, deletedCount))
+    if active then
+        print("删除选中 %d 个地址", skipedCount + deletedCount)
+        miRemove.DoClick()
+    end
+
+    print("===== 完成 =====")    
+end
+
+
+function BoxFilter(inputPos, minV, maxV, conditionInverse, mode, active)
+    -- inputPos: vector - 目标坐标
+    -- [minV, maxV]: vector - 描述Box
+    -- conditionInverse: Boolean - 条件反转, true 表示取反
+    -- mode: String - 搜索模式，"x"、"y"、"z", 假设传入的地址可能不是x的地址，而是y的地址，z的地址，需要根据 mode 来偏移
+    -- active: Boolean - 是否启动, 启动后可能删除扫描列表的地址
+
+
+    -- 获取扫描结果列表对象
+    local fl = getMainForm().Foundlist3
+
+    -- 查找右键菜单的"删除选中地址"
+    local miRemove = nil
+    for i = 0, fl.PopupMenu.Items.Count - 1 do
+        if fl.PopupMenu.Items[i].Name == "Removeselectedaddresses1" then
+            miRemove = fl.PopupMenu.Items[i]
+            break
+        end
+    end
+
+    if miRemove == nil then
+        print("错误：找不到 '删除选中地址' 菜单项")
+        return
+    end
+
+    
+    local modeOffset = getVectorOffset(mode)
+    local count = fl.Items.Count
+    local inputX, inputY, inputZ = inputPos[1], inputPos[2], inputPos[3]
+    local minx, maxx = inputPos[1] + minV[1], inputPos[1] + maxV[1]
+    local miny, maxy = inputPos[2] + minV[2], inputPos[2] + maxV[2]
+    local minz, maxz = inputPos[3] + minV[3], inputPos[3] + maxV[3]
+
+    print("===== 开始Box过滤 =====")
+    print(string.format("共 %d 个地址", count))    
+    print(string.format("目标: (%f, %f, %f)", inputX, inputY, inputZ))   
+    print(string.format("Box: [%f, %f, %f], [%f, %f, %f]", minx, miny, minz, maxx, maxy, maxz))   
+    print(string.format("模式偏移：%d", modeOffset)) 
+    print(string.format("条件反转：%s", conditionInverse and "是" or "否")) 
+
+    local skipedCount = 0
+    local deletedCount = 0
+    for i = 0, count - 1 do
+        local item = fl.Items[i]
+        local addrStr = item.Caption
+        local addr = getAddress(addrStr)
+        if addr then addr = addr + modeOffset end
+
+        if addr then
+            local x, y, z = getVectorByAddr(addr)
+
+            if x and y and z then
+                local hit = x >= minx and x <= maxx and y >= miny and y <= maxy and z >= minz and z <= maxz
+                if conditionInverse then hit = not hit end
+
+                if hit then
+                    item.Selected = false
+                else
+                    item.Selected = true
+                    deletedCount = deletedCount + 1
+                end
+            else
+                item.Selected = true
+                skipedCount = skipedCount + 1
+            end
+        else
+            item.Selected = true
+            skipedCount = skipedCount + 1
+        end
+
+    end
+
+
+    print(string.format("共跳过 %d 个地址, 不符合条件 %d 个地址", skipedCount, deletedCount))
+    if active then
+        print("删除选中 %d 个地址", skipedCount + deletedCount)
+        miRemove.DoClick()
+    end
+
+    print("===== 完成 =====")   
+end
+
+
+
+
+local function main()
+    print("===============开始向量匹配===============")
+    if InputVecAddrStr and type(InputVecAddrStr) == "string" then
+        local x, y, z = getVectorByAddr(InputVecAddrStr)
+        if x and y and z then
+            InputPosition = {x, y, z}
+            print(string.format("使用 \"%s\" 作为输入向量: (%f, %f, %f)", InputVecAddrStr, InputPosition[1], InputPosition[2], InputPosition[3]))
+        else
+            print(string.format("输入向量地址 %s 无效", InputVecAddrStr))
+            return
+        end
+    end
+
+
+    if FilterType == "Sphere" then
+        SphereFilter(InputPosition, 
+            SphereCondition.minRange, 
+            SphereCondition.maxRange, 
+            ConditionInverse,
+            VectorOffsetMode, 
+            FilterActive
+        )
+    elseif FilterType == "Box" then
+        BoxFilter(InputPosition, 
+            BoxCondition.minV,
+            BoxCondition.maxV,
+            ConditionInverse,
+            VectorOffsetMode, 
+            FilterActive
+        )
+    else
+        print("未知的过滤器类型 %s", FilterType)
+        return
+    end
+
+    print("===============向量匹配完成===============\n")
+end
+
+main()
