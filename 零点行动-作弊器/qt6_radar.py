@@ -4,17 +4,15 @@ from PySide6.QtWidgets import QApplication, QWidget
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter, QColor, QPen, QFont
 
-
 class RadarEntity:
     """
     雷达实体，表示一个可显示在雷达上的目标。
     """
 
-    def __init__(self, id, name, pos=None, yaw=None, color=None):
+    def __init__(self, name, pos=None, yaw=None, color=None):
         """
         初始化雷达实体。
 
-        :param id: 实体唯一标识符（任意可哈希类型）
         :param name: 实体名称（字符串）
         :param pos: 位置，应包含至少 2 个元素（x, y[, z]），世界坐标
         :param yaw: 朝向角（度），相对于世界坐标系，float 类型
@@ -27,14 +25,13 @@ class RadarEntity:
         if yaw is not None and not isinstance(yaw, (int, float)):
             raise ValueError("yaw must be a number")
 
-        self.id = id
         self.name = name
         self.color = color
         self.pos = pos
         self.yaw = yaw
 
 
-class RadarCanvas(QWidget):
+class Qt6RadarCanvas(QWidget):
     """
     雷达画布，用于显示中心点、网格、雷达范围及实体。
     """
@@ -56,19 +53,25 @@ class RadarCanvas(QWidget):
         :param parent: 父窗口部件
         """
         super().__init__(parent)
-        self.centerPos = None
-        self.centerYaw = None
+        self.centerPos = (0, 0)
+        self.centerYaw = 0
         self.entities = {}
-        self._tempEntities = {}
         self.radar_radius = 1000
         self.radar_mode = "Dynamicness"  # "Dynamicness" 或 "Fixedness"
+        self.enableGrid = False
+        self.enableBorder = True
+
+    def setEnableBorder(self, enableBorder):
+        """设置是否绘制雷达边界圆。"""
+        self.enableBorder = enableBorder
+
+    def setEnableGrid(self, enableGrid):
+        """设置是否绘制网格线。"""
+        self.enableGrid = enableGrid
+
 
     def setRadarRadius(self, radius):
-        """
-        设置雷达探测半径（世界单位）。
-
-        :param radius: 正数半径值
-        """
+        """设置雷达探测半径（世界单位）。"""
         
         self.radar_radius = max(radius, 1)
 
@@ -109,39 +112,17 @@ class RadarCanvas(QWidget):
         self.centerPos = pos
         self.centerYaw = yaw
 
-    def addEntity(self, entity):
+    def addEntity(self, idx, entity):
         """
-        添加持久实体。
+        添加绘制实体。
 
         :param entity: RadarEntity 实例
         :raises ValueError: 若 entity 不是 RadarEntity 类型
         """
         if not isinstance(entity, RadarEntity):
             raise ValueError("Entity must be a RadarEntity instance")
-        self.entities[entity.id] = entity
+        self.entities[idx] = entity
 
-    def removeEntity(self, entity):
-        """
-        移除持久实体（通过 id 置空，保留键）。
-
-        :param entity: RadarEntity 实例
-        """
-        self.entities[entity.id] = None
-
-    def clearEntities(self):
-        """清空所有持久实体。"""
-        self.entities.clear()
-
-    def addTempEntity(self, entity):
-        """
-        添加临时实体（仅在下一帧绘制时有效，绘制后自动清除）。
-
-        :param entity: RadarEntity 实例
-        :raises ValueError: 若 entity 不是 RadarEntity 类型
-        """
-        if not isinstance(entity, RadarEntity):
-            raise ValueError("Entity must be a RadarEntity instance")
-        self._tempEntities[entity.id] = entity
 
     def drawCenterPoint(self, painter):
         """
@@ -224,11 +205,31 @@ class RadarCanvas(QWidget):
             painter.setPen(QPen(ent_color, 2))
             painter.drawLine(sx, sy, sx + dx, sy + dy)
 
+    def drawBorder(self, painter):
+        """
+        绘制雷达边界圆。
+
+        :param painter: QPainter 实例
+        """
+        if not self.enableBorder:
+            return
+
+        w, h = self.width(), self.height()
+        cx, cy = w / 2, h / 2
+        scale = min(w, h) / 2 / self.radar_radius
+
+        painter.setPen(QPen(self.RAR_RANGE_COLOR, 2))
+        painter.drawEllipse(cx - self.radar_radius * scale, cy - self.radar_radius * scale,
+                            self.radar_radius * scale * 2, self.radar_radius * scale * 2)
+
+
     def drawGrid(self, painter):
         """
         绘制网格线及刻度标签。
         垂直网格线（x 方向）的标签显示在底部，水平网格线（y 方向）的标签显示在右侧。
         """
+        if not self.enableGrid:
+            return
         w, h = self.width(), self.height()
         cx, cy = w / 2, h / 2
         scale = min(w, h) / 2 / self.radar_radius
@@ -275,26 +276,24 @@ class RadarCanvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
+        self.drawBorder(painter)
         self.drawGrid(painter)
         self.drawCenterPoint(painter)
 
         for entity in self.entities.values():
             self.drawEntity(painter, entity)
 
-        for entity in self._tempEntities.values():
-            self.drawEntity(painter, entity)
-
-        self._tempEntities.clear()
+        self.entities.clear()
 
         painter.end()
         super().paintEvent(event)
 
-
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = RadarCanvas()
+    window = Qt6RadarCanvas()
     window.show()
     window.setCenterPos((0, 0, 0))
     window.setCenterYaw(0)
-    window.addEntity(RadarEntity(id="1", name="entity1", pos=(100, 100, 100), yaw=50))
+    window.addEntity("1", RadarEntity(name="entity1", pos=(100, 100, 100), yaw=50))
+
     sys.exit(app.exec())

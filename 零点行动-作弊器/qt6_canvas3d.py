@@ -106,7 +106,7 @@ class Text3D:
         self.color = color
 
 
-class Numpy3DCanvas(QWidget):
+class Qt6Numpy3DCanvas(QWidget):
     """
     注意: 相机看向 X 正轴, 右手坐标系, Y 轴向左, Z 轴向上
     """
@@ -117,14 +117,22 @@ class Numpy3DCanvas(QWidget):
     DEFAULT_SIZE = 10.0
     DEFAULT_FONT = QFont("Arial", 12)
 
+    COLOR_X = QColor(255, 0, 0)
+    COLOR_Y = QColor(0, 255, 0)
+    COLOR_Z = QColor(0, 0, 255)
+    AXIS_X = np.array([1.0, 0.0, 0.0])
+    AXIS_Y = np.array([0.0, 1.0, 0.0])
+    AXIS_Z = np.array([0.0, 0.0, 1.0])
+
     def __init__(self, parent=None):
         super().__init__(parent)
 
         # 默认外旋 roll, pitch, yaw, 使用度为单位
         self.angSeq = 'xyz' 
         self.angIsDeg = True
-        self.antialiasing = False
+        self.antialiasing = True
         self.enableCrosshair = True
+        self.enableDebugCoordinate = False
 
 
         self._camPos = np.array([0.0, 0.0, 0.0], dtype=np.float32)
@@ -132,9 +140,9 @@ class Numpy3DCanvas(QWidget):
         self._fov = 90.0
         self._zNear = 0.1
         self._zFar = 1000.0
-        self._viewMatrix = self.buildViewMatrix()
-        self._projectionMatrix = self.buildProjectionMatrix()
-        self._VPMatrix = self._projectionMatrix @ self._viewMatrix
+        self._viewMatrix = self._buildViewMatrix()
+        self._projectionMatrix = self._buildProjectionMatrix()
+        self._VPMatrix = self._projectionMatrix @ self._viewMatrix[1]
 
 
         self._point3DDict = {}
@@ -142,6 +150,9 @@ class Numpy3DCanvas(QWidget):
         self._wireFrameBox2D3Dict = {}
         self._wireFrameBox3DDict = {}
         self._text3DDict = {}
+
+    def setDebugCoordinate(self, enable: bool):
+        self.enableDebugCoordinate = enable
 
     def setAngSeq(self, seq: str):
         self.angSeq = seq
@@ -160,20 +171,20 @@ class Numpy3DCanvas(QWidget):
         self._camPos = np.array(pos, dtype=np.float32)
         self._camAng = np.array(ang, dtype=np.float32)
 
-        self._viewMatrix = self.buildViewMatrix()
-        self._projectionMatrix = self.buildProjectionMatrix()
-        self._VPMatrix = self._projectionMatrix @ self._viewMatrix
+        self._viewMatrix = self._buildViewMatrix()
+        self._projectionMatrix = self._buildProjectionMatrix()
+        self._VPMatrix = self._projectionMatrix @ self._viewMatrix[1]
 
     def setScreen(self, fov=90.0, zNear=0.1, zFar=1000.0):
         self._fov = fov
         self._zNear = zNear
         self._zFar = zFar
 
-        self._viewMatrix = self.buildViewMatrix()
-        self._projectionMatrix = self.buildProjectionMatrix()
-        self._VPMatrix = self._projectionMatrix @ self._viewMatrix
+        self._viewMatrix = self._buildViewMatrix()
+        self._projectionMatrix = self._buildProjectionMatrix()
+        self._VPMatrix = self._projectionMatrix @ self._viewMatrix[1]
 
-    def buildProjectionMatrix(self):
+    def _buildProjectionMatrix(self):
         """
         创建透视投影矩阵, 相机看向 X 正轴, Y 轴向左, Z 轴向上, 右手坐标系
 
@@ -204,7 +215,7 @@ class Numpy3DCanvas(QWidget):
 
         return P
 
-    def buildViewMatrix(self):
+    def _buildViewMatrix(self):
         """
         创建视图矩阵, 相机看向 X 正轴, Y 轴向左, Z 轴向上, 右手坐标系
 
@@ -214,9 +225,9 @@ class Numpy3DCanvas(QWidget):
         返回:
             (4,4) ndarray 视图矩阵
         """
-        V = math3d.makeTransformFromEuler(self._camPos, self._camAng, self.angSeq, self.angIsDeg)
-        math3d.invertInPlaceFast(V)
-        return V
+
+        V = math3d.makeTransformFromEuler(self._camPos, np.array([1.0, 1.0, 1.0]), self._camAng, self.angSeq, self.angIsDeg)
+        return (V, math3d.getInverseFast(V))
 
     def transformPoint(self, MVP, pos):
         """
@@ -238,16 +249,12 @@ class Numpy3DCanvas(QWidget):
 
         return QPointF(cx - dx * w * 0.5, cy - dy * h * 0.5), depth
 
-    def transformLines(self, MVP, points) -> list[QLineF]:
+    def transformLinesDirect(self, MVP, points) -> list[QLineF]:
         """
         将多个点（成对构成线段）转换为屏幕坐标线段
-        输入: points 形状 (N, 3)
+        输入: points 形状 (4, N)
         返回: list[QLineF]，若点数奇数则最后一个点丢弃
         """
-
-        # 转换为齐次坐标 (N, 4)
-        if points.shape[1] == 3:
-            points = np.hstack((points, np.ones((points.shape[0], 1))))
 
         pts_c = MVP @ points
         depths = pts_c[3, :]
@@ -274,6 +281,14 @@ class Numpy3DCanvas(QWidget):
         
         return lines
 
+    def transformLines(self, MVP, points) -> list[QLineF]:
+        """
+        将多个点（成对构成线段）转换为屏幕坐标线段
+        输入: points 形状 (N, 3)
+        返回: list[QLineF]，若点数奇数则最后一个点丢弃
+        """
+        return self.transformLinesDirect(MVP, np.hstack((points, np.ones((points.shape[0], 1)))).T)
+
     def addPoint3D(self, id, point):
         if not isinstance(point, Point3D):
             raise ValueError("point must be a Point3D instance")
@@ -299,8 +314,31 @@ class Numpy3DCanvas(QWidget):
             raise ValueError("box must be a WireFrameBox3D instance")
         self._wireFrameBox3DDict[id] = box
 
+    def _drawDebugCoordinate(self, painter):
+        if not self.enableDebugCoordinate:
+            return
 
-    def drawPoint3D(self, painter, point: Point3D):
+        forward = math3d.getForward(self._viewMatrix[0])
+
+        center = self._camPos + forward * 10.0
+        points = np.array([
+            center, center + 5.0 * self.AXIS_X,
+            center, center + 5.0 * self.AXIS_Y,
+            center, center + 5.0 * self.AXIS_Z,
+        ])
+
+        lineList = self.transformLines(self._VPMatrix, points)
+
+        painter.setPen(QPen(self.COLOR_X, 2))
+        painter.drawLine(lineList[0])
+        painter.setPen(QPen(self.COLOR_Y, 2))
+        painter.drawLine(lineList[1])
+        painter.setPen(QPen(self.COLOR_Z, 2))
+        painter.drawLine(lineList[2])
+
+
+
+    def _drawPoint3D(self, painter, point: Point3D) -> bool:
         pos, color = point.pos, point.color
 
         p, depth = self.transformPoint(self._VPMatrix, pos)
@@ -315,12 +353,15 @@ class Numpy3DCanvas(QWidget):
             size = point.size if point.size is not None else self.DEFAULT_SIZE
             size = size / max(abs(depth), 0.001)
             painter.drawEllipse(p, size, size)
+            return True
+        else:
+            return False
 
-    def drawLines3D(self, painter, lines: Lines3D):
+    def _drawLines3D(self, painter, lines: Lines3D):
         points, color = lines.points, lines.color
 
         
-        lineList = self.transformLines(self._VPMatrix, points)
+        lineList = self.transformLinesDirect(self._VPMatrix, points)
         if len(lineList) > 0:
             if isinstance(color, str):
                 color = QColor(color)
@@ -330,8 +371,11 @@ class Numpy3DCanvas(QWidget):
 
             for line in lineList:
                 painter.drawLine(line)
+            return True
+        else:
+            return False
 
-    def drawWireFrameBox2D3D(self, painter, box: WireFrameBox2D3D):
+    def _drawWireFrameBox2D3D(self, painter, box: WireFrameBox2D3D) -> bool:
         width, height, pos, color = box.width, box.height, box.pos, box.color
 
         p, depth = self.transformPoint(self._VPMatrix, pos)
@@ -349,8 +393,11 @@ class Numpy3DCanvas(QWidget):
 
             painter.setPen(QPen(color, 2))
             painter.drawRect(QRectF(p.x(), p.y(), width, height))
+            return True
+        else:
+            return False
 
-    def drawText3D(self, painter, text: Text3D):
+    def _drawText3D(self, painter, text: Text3D) -> bool:
         pos, color = text.pos, text.color
 
         p, _ = self.transformPoint(self._VPMatrix, pos)
@@ -363,12 +410,15 @@ class Numpy3DCanvas(QWidget):
             painter.setPen(QPen(color, 2))
             painter.setFont(self.DEFAULT_FONT)
             painter.drawText(p, text.text)
+            return True
+        else:
+            return False
 
-    def drawWireFrameBox3D(self, painter, box: WireFrameBox3D):
+    def _drawWireFrameBox3D(self, painter, box: WireFrameBox3D) -> bool:
         points, pos, ang, color = box.points, box.pos, box.ang, box.color
-        model = math3d.makeTransformFromEuler(pos, ang, self.angSeq, self.angIsDeg)
+        model = math3d.makeTransformFromEuler(pos, np.array([1.0, 1.0, 1.0]), ang, self.angSeq, self.angIsDeg)
 
-        lineList = self.transformLines(self._VPMatrix @ model, points)
+        lineList = self.transformLinesDirect(self._VPMatrix @ model, points)
         if len(lineList) > 0:
             if isinstance(color, str):
                 color = QColor(color)
@@ -378,10 +428,11 @@ class Numpy3DCanvas(QWidget):
             painter.setPen(QPen(color, 2))
             for line in lineList: 
                 painter.drawLine(line)
+            return True
+        else:
+            return False
 
-
-
-    def drawCrosshair(self, painter):
+    def _drawCrosshair(self, painter):
         if not self.enableCrosshair:
             return
 
@@ -396,25 +447,27 @@ class Numpy3DCanvas(QWidget):
         if self.antialiasing:
             painter.setRenderHint(QPainter.Antialiasing)
 
-        self.drawCrosshair(painter)
+        self._drawCrosshair(painter)
 
         if self._VPMatrix is None:
             return
 
+        self._drawDebugCoordinate(painter)
+
         for id, point in self._point3DDict.items():
-            self.drawPoint3D(painter, point)
+            self._drawPoint3D(painter, point)
 
         for id, lines in self._lines3DDict.items():
-            self.drawLines3D(painter, lines)
+            self._drawLines3D(painter, lines)
 
         for id, text in self._text3DDict.items():
-            self.drawText3D(painter, text)
+            self._drawText3D(painter, text)
 
         for id, box in self._wireFrameBox2D3Dict.items():
-            self.drawWireFrameBox2D3D(painter, box)
+            self._drawWireFrameBox2D3D(painter, box)
 
         for id, box in self._wireFrameBox3DDict.items():
-            self.drawWireFrameBox3D(painter, box)
+            self._drawWireFrameBox3D(painter, box)
 
 
         self._point3DDict.clear()
@@ -426,9 +479,9 @@ class Numpy3DCanvas(QWidget):
         painter.end()
 
     def resizeEvent(self, event):
-        self._viewMatrix = self.buildViewMatrix()
-        self._projectionMatrix = self.buildProjectionMatrix()
-        self._VPMatrix = self._projectionMatrix @ self._viewMatrix
+        self._viewMatrix = self._buildViewMatrix()
+        self._projectionMatrix = self._buildProjectionMatrix()
+        self._VPMatrix = self._projectionMatrix @ self._viewMatrix[1]
         return super().resizeEvent(event)
 
 
@@ -439,7 +492,7 @@ if __name__ == "__main__":
 
 
     app = QApplication(sys.argv)
-    window = Numpy3DCanvas()
+    window = Qt6Numpy3DCanvas()
     window.show()
     window.setCamPosAng([0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
     window.setScreen(90, 0.1, 1000.0)
@@ -467,3 +520,4 @@ if __name__ == "__main__":
     timer.start(30)
 
     sys.exit(app.exec())
+
