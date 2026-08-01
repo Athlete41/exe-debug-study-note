@@ -152,6 +152,10 @@ class CZCheatMainWindow(QWidget):
             self.radar.update() 
             
             # 3D渲染
+            fov = cz_mem_module.Player.get_fov()
+            if fov is not None:
+                self.canvas3D.setScreen(fov, self.Z_NEAR, self.Z_FAR)
+                
             if camPos is not None and camAng is not None:
                 # pitch yaw roll -> roll pitch yaw
                 self.canvas3D.setCamPosAng(camPos, [camAng[2], camAng[0], camAng[1]])

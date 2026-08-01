@@ -9,6 +9,7 @@ cheat_table = {
     "PlayerHealth": "[hw.dll + 0x100CC60] + 0x504",
     "PlayerPosGetter": "[hw.dll + 0x100CC60] + 0x504 - 0x158",
     "PlayerAngGetter": "[hw.dll + 0x100CC60] + 0x504 - 0xEC",
+    "PlayerFOVGetter": "client.dll + 0x10A4B4",
     "RobotListHealthAddr": "[hw.dll + 0x100CC60] + 0x504",
     "EntitySize": 0x324,
     "HealthPosOffset": -0x158,
@@ -101,6 +102,14 @@ class Player:
         plyAngAddr = get_addr_by_key("PlayerAngGetter")
         if plyAngAddr is not None:
             return read_vector(plyAngAddr)
+        else:
+            return None
+
+    @staticmethod
+    def get_fov() -> float | None:
+        plyFOVAddr = get_addr_by_key("PlayerFOVGetter")
+        if plyFOVAddr is not None:
+            return PM.read_float(plyFOVAddr)
         else:
             return None
 
