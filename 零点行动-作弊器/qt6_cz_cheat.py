@@ -5,8 +5,8 @@ from PySide6.QtGui import QShortcut, QKeySequence
 from PySide6.QtGui import QGuiApplication
 import math
 import win32gui
-import win32api
 import win32con
+import keyboard
 
 import cz_mem_module
 from qt6_canvas3d import Qt6Numpy3DCanvas, Point3D
@@ -22,34 +22,30 @@ class CZCheatMainWindow(QWidget):
     Z_NEAR = 0.1
     Z_FAR = 10000.0
     SLIENT = True
-    WINDOW_WIDTH = 400
-    WINDOW_HEIGHT = 400
+    WINDOW_WIDTH = 1600
+    WINDOW_HEIGHT = 900
     
     def setup_overlay(self):
-        """
-        将当前窗口设置为透明覆盖层：
-            - 无边框
-            - 置顶
-            - 鼠标穿透（无法被点击）
-            - 指定颜色变为透明
-        """
-        TRANSPARENT_COLOR = (0, 0, 0)
+        # 1. 设置窗口属性：无边框、置顶、Tool（不抢焦点）
+        self.setWindowFlags(
+            Qt.FramelessWindowHint |
+            Qt.WindowStaysOnTopHint |
+            Qt.Tool
+        )
 
-        # Qt 窗口属性：无边框、置顶、不获取焦点（Tool），不设置透明背景
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
-        self.setStyleSheet(f"background-color: rgb{TRANSPARENT_COLOR};")
+        # 2. 启用真正的透明背景（关键！）
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+
+        # 3. 取消颜色键设置（不再需要）
+        # 不需要 setStyleSheet，不需要 SetLayeredWindowAttributes
 
         hwnd = int(self.winId())
-        # 通过 Windows API 设置分层窗口、鼠标穿透、颜色键透明
+        # 4. 依然需要鼠标穿透（WS_EX_TRANSPARENT）
         ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
-        ex_style |= win32con.WS_EX_LAYERED | win32con.WS_EX_TRANSPARENT
+        ex_style |= win32con.WS_EX_TRANSPARENT | win32con.WS_EX_LAYERED
         win32gui.SetWindowLong(hwnd, win32con.GWL_EXSTYLE, ex_style)
 
-        
-        color_ref = win32api.RGB(*TRANSPARENT_COLOR)
-        win32gui.SetLayeredWindowAttributes(hwnd, color_ref, 0, win32con.LWA_COLORKEY)
-
-        # 强制置顶（双重保险）
+        # 5. 置顶
         win32gui.SetWindowPos(hwnd, win32con.HWND_TOPMOST, 0, 0, 0, 0,
                             win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_SHOWWINDOW)
         
@@ -120,9 +116,18 @@ class CZCheatMainWindow(QWidget):
         if cz_mem_module.PM is None:
             cz_mem_module.find_pm()
 
+    def keyCheck(self):
+        if keyboard.is_pressed("Ctrl+F"):
+            self.insertFilter()
+        if keyboard.is_pressed("Ctrl+C"):
+            self.clearFilter()
+
     def timerTask(self):
+        self.keyCheck()
+
         if cz_mem_module.PM is None:
             return
+        
         try:
             camPos, camAng = cz_mem_module.Player.get_pos(), cz_mem_module.Player.get_ang()
 
