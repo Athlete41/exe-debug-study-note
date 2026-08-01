@@ -5,6 +5,13 @@ import re
 PM = None
 module_addr_cache = {}
 process_name = "hl.exe"
+
+
+"""
+FOV获取候选
+"PlayerFOVGetter": "client.dll + 0x12755C"
+"PlayerFOVGetter": "client.dll + 0x1275B0"
+"""
 cheat_table = {
     "PlayerHealth": "[hw.dll + 0x100CC60] + 0x504",
     "PlayerPosGetter": "[hw.dll + 0x100CC60] + 0x504 - 0x158",
