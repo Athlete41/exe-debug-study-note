@@ -9,7 +9,7 @@ import win32con
 import keyboard
 
 import cz_mem_module
-from qt6_canvas3d import Qt6Numpy3DCanvas, Point3D
+from qt6_canvas3d import Qt6Numpy3DCanvas, Point3D, Text3D
 from qt6_radar import Qt6RadarCanvas, RadarEntity
 
 
@@ -21,7 +21,7 @@ class CZCheatMainWindow(QWidget):
     FOV = 90.0
     Z_NEAR = 0.1
     Z_FAR = 10000.0
-    SLIENT = True
+    SLIENT = False
     WINDOW_WIDTH = 1600
     WINDOW_HEIGHT = 900
     
@@ -170,10 +170,11 @@ class CZCheatMainWindow(QWidget):
                 if entPos is not None and entAng is not None and entHealth is not None:
                     if entHealth > 1:
                         self.canvas3D.addPoint3D(entId, Point3D(entPos, 5000))
+                        self.canvas3D.addText3D(entId, Text3D(entPos, f"{entHealth}"))
 
             self.canvas3D.update()
         except Exception as e:
-            if self.SLIENT:
+            if not self.SLIENT:
                 print(e)
 
 

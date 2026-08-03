@@ -351,8 +351,10 @@ class Qt6Numpy3DCanvas(QWidget):
             painter.setPen(QPen(color, 2))
 
             size = point.size if point.size is not None else self.DEFAULT_SIZE
-            size = size / max(abs(depth), 0.001)
-            painter.drawEllipse(p, size, size)
+            sizeX = size / max(abs(depth), 0.001) * self._projectionMatrix[1, 1]  # 考虑FOV等因素
+            sizeY = size / max(abs(depth), 0.001) * self._projectionMatrix[2, 2]
+            painter.drawEllipse(p, sizeX, sizeY)
+
             return True
         else:
             return False
@@ -383,8 +385,8 @@ class Qt6Numpy3DCanvas(QWidget):
             width = width if width is not None else self.DEFAULT_SIZE
             height = height if height is not None else self.DEFAULT_SIZE
 
-            width = width / max(abs(depth), 0.001)
-            height = height / max(abs(depth), 0.001)
+            width = width / max(abs(depth), 0.001) * self._projectionMatrix[1, 1]
+            height = height / max(abs(depth), 0.001) * self._projectionMatrix[2, 2]
 
             if isinstance(color, str):
                 color = QColor(color)
