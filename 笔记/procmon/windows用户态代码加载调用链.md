@@ -15,6 +15,8 @@
 #### 第一类：标准磁盘加载（文件落地）
 靠 Windows 系统机制从磁盘加载 PE 模块，系统内核全程知情。
 
+**难度**：⭐
+
 **调用链**：
 `LoadLibrary`（用户态）  
 → `NtOpenFile`（打开磁盘文件）  
@@ -30,6 +32,8 @@
 
 #### 第二类：内存无文件注入（不落地）
 不走系统加载器，直接把二进制数据塞进目标进程内存，手动执行。**反射式 DLL（有PE结构）和 Shellcode（裸码）都走这条路，只是写入的内容不同。**
+
+**难度**：⭐⭐⭐
 
 **调用链（统一）**：
 `VirtualAllocEx`（申请内存）  
@@ -47,11 +51,18 @@
 
 > ⚠️ **重要提醒**：ProcMon 监控不到线程创建（`CreateRemoteThread` 最终走 `NtCreateThreadEx`，这是内核调度行为）。要抓线程，得上 **API Monitor** 或 **WinDbg**。
 
----
 
 ### 🔍 最终判断法则（一张表搞定）
 
-| ProcMon 看到什么 | 结论 |
-| :--- | :--- |
-| `CreateFile`（磁盘路径）+ `LoadImage`（目标进程+System双记录） | **标准磁盘加载** |
-| `VirtualAllocEx` + `WriteProcessMemory`（跨进程写数据），无 `CreateFile`，无 `LoadImage` | **内存注入**（不管里面是 PE 还是 Shellcode） |
+| ProcMon 看到什么 | 结论 | 难度 |
+| :--- | :--- | :--- |
+| `CreateFile`（磁盘路径）+ `LoadImage`（目标进程+System双记录） | **标准磁盘加载** | ⭐ |
+| `VirtualAllocEx` + `WriteProcessMemory`（跨进程写数据），无 `CreateFile`，无 `LoadImage` | **内存注入**（不管里面是 PE 还是 Shellcode） | ⭐⭐⭐ |
+
+
+### 💡 难度说明
+
+| 难度 | 含义 |
+|:---|:---|
+| ⭐ | 基础操作，调用系统API即可完成，无需手工解析PE结构 |
+| ⭐⭐⭐ | 需跨进程操作、手工修复重定位/导入表，或编写位置无关的Shellcode，技术门槛较高 |
