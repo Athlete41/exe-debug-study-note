@@ -26,7 +26,8 @@ class CSSCheatMainWindow(QWidget):
     SLIENT = False
     WINDOW_WIDTH = 1600
     WINDOW_HEIGHT = 900
-    
+
+    PLAYER_NAME = "装唐阴他一手"
     def setup_overlay(self):
         # 1. 设置窗口属性：无边框、置顶、Tool（不抢焦点）
         self.setWindowFlags(
@@ -94,46 +95,54 @@ class CSSCheatMainWindow(QWidget):
     def timerTask(self):
    
         try:
-            playerInfo = css_mem_module.PlayerInfo.getData()
-            if playerInfo is None:
-                return
-            
-            camPos = playerInfo["Pos"]
-            camAng = playerInfo["Ang"]
-            fov = playerInfo["FOV"]
-
+            playerInfo = None
             botList = []
-            for i in range(1, self.BOT_MAX, 1):
+            for i in range(self.BOT_MAX):
                 botInfo = css_mem_module.BotInfo.getData(i)
                 if botInfo is None:
+                    continue
+
+                botName = botInfo["Name"]
+                if botName is None:
                     continue
 
                 botTeamType = botInfo["TeamType"]
                 if botTeamType is None or botTeamType == "观察者" or botTeamType == "未知":
                     continue 
-                color = Qt.green if botTeamType == playerInfo["TeamType"] else Qt.red
-    
-                botList.append((i, color, botInfo))
 
+                if botName == self.PLAYER_NAME:
+                    playerInfo = botInfo
+                    continue
+    
+                botList.append((i, botInfo))
+
+  
+            if playerInfo is None:
+                return
+            
             # 雷达渲染
+            camPos, camAng = playerInfo["Pos"], playerInfo["Ang"]
+
             if camPos is not None:
                 self.radar.setCenterPos(camPos)
             if camAng is not None:
                 self.radar.setCenterYaw(camAng[1])
 
 
-            for i, color, botInfo in botList:
+            for i, botInfo in botList:
                 botHealth, botPos, botAng = botInfo["Health"], botInfo["Pos"], botInfo["Ang"]
-                entId = f"Robot-{i}"
-                entName = f"{botHealth}"
+                botTeamType = botInfo["TeamType"]
+                botId = f"Robot-{i}"
+                text = f"{botHealth}"
                 if botPos is not None and botAng is not None and botHealth is not None:
                     if botHealth > 1:
-                        self.radar.addEntity(entId, RadarEntity(entName, botPos, yaw=botAng[1], color=color))
+                        color = Qt.green if botTeamType == playerInfo["TeamType"] else Qt.red
+                        self.radar.addEntity(botId, RadarEntity(text, botPos, yaw=botAng[1], color=color))
             
             self.radar.update() 
             
             # 3D渲染
-
+            fov = css_mem_module.FOVGetter.getData()
             if fov is not None:
                 self.canvas3D.setScreen(fov, self.Z_NEAR, self.Z_FAR)
                 
@@ -141,14 +150,16 @@ class CSSCheatMainWindow(QWidget):
                 # pitch yaw roll -> roll pitch yaw
                 self.canvas3D.setCamPosAng(camPos, [camAng[2], camAng[0], camAng[1]])
    
-            for i, color, botInfo in botList:
+            for i, botInfo in botList:
                 botHealth, botPos, botAng = botInfo["Health"], botInfo["Pos"], botInfo["Ang"]
-                entId = f"Robot-{i}"
-                entName = f"{botHealth}"
+                botTeamType = botInfo["TeamType"]
+                botId = f"Robot-{i}"
+                text = f"{botHealth}"
                 if botPos is not None and botAng is not None and botHealth is not None:
                     if botHealth > 1:
-                        self.canvas3D.addPoint3D(entId, Point3D(botPos, 5000, color=color))
-                        self.canvas3D.addText3D(entId, Text3D(botPos, f"{botHealth}", color=color))
+                        color = Qt.green if botTeamType == playerInfo["TeamType"] else Qt.red
+                        self.canvas3D.addPoint3D(botId, Point3D(botPos, 5000, color=color))
+                        self.canvas3D.addText3D(botId, Text3D(botPos, text, color=color))
 
             self.canvas3D.update()
         except Exception as e:

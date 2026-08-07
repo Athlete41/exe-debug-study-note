@@ -1,10 +1,11 @@
 """
-"BotInfoListAddr": "[client.dll + 0x69CD30] + 0x60",
+"BotInfoListAddr": "[client.dll + 0x69CD30] + 0x40",
 "BotInfoSize": 0x140,
-"TeamTypeOffset": 0,
-"HealthPosOffset": 0x4,
-"PosOffset": 0x8,
-"AngOffset": 0x14,
+"NameOffset": 0x0,
+"TeamTypeOffset": 0x20,
+"HealthPosOffset": 0x24,
+"PosOffset": 0x28,
+"AngOffset": 0x34,
 "FOVGetter": "client.dll + 0x68D078"
 """
 import sysmemtool as MemTool
@@ -18,10 +19,11 @@ MODULE_ADDR = {}
 
 OFFSET = {
     "BotInfoSize": 0x140,
-    "TeamTypeOffset": 0,
-    "HealthOffset": 0x4,
-    "PosOffset": 0x8,
-    "AngOffset": 0x14,
+    "NameOffset": 0x0,
+    "TeamTypeOffset": 0x20,
+    "HealthOffset": 0x24,
+    "PosOffset": 0x28,
+    "AngOffset": 0x34,
 }
 
 def Init():
@@ -54,39 +56,41 @@ class BotInfo:
     def getData(botIdx: int) -> dict | None:
         clientDllAddr = MODULE_ADDR["client.dll"]
    
-        temp = MemTool.readUInt64(HANDLE, PID, clientDllAddr + 0x69CD30)
-        if temp is None:
+        botInfoListAddr = MemTool.readUInt64(HANDLE, PID, clientDllAddr + 0x69CD30)
+        if botInfoListAddr is None:
             return None
-        result = {}
-        botInfoListAddr = temp + 0x60 + botIdx * OFFSET["BotInfoSize"]
+        else:
+            botInfoListAddr += 0x40
 
-        teamType = MemTool.readUInt32(HANDLE, PID, botInfoListAddr + OFFSET["TeamTypeOffset"])
+        result = {}
+        botInfoAddr = botInfoListAddr + botIdx * OFFSET["BotInfoSize"]
+        name = MemTool.readString(HANDLE, PID, botInfoAddr + OFFSET["NameOffset"], 0x20, encoding='utf-8') 
+        if name is None:
+            return None
+        
+        teamType = MemTool.readUInt32(HANDLE, PID, botInfoAddr + OFFSET["TeamTypeOffset"])
         if teamType is None:
             return None
 
         # 0: 未知 1: 观察者 2: 恐怖分子 3: 警察
         if teamType > 3:
             return None
-
+        
+        result["Name"] = name # 转换为字符串并解码为 UTF-8
         result["TeamType"] = BotInfo.TeamTypeMapping[teamType]
-        result["Health"] = MemTool.readUInt32(HANDLE, PID, botInfoListAddr + OFFSET["HealthOffset"])
-        result["Pos"] = MemTool.readFloatVector(HANDLE, PID, botInfoListAddr + OFFSET["PosOffset"])
-        result["Ang"] = MemTool.readFloatVector(HANDLE, PID, botInfoListAddr + OFFSET["AngOffset"])
+        result["Health"] = MemTool.readUInt32(HANDLE, PID, botInfoAddr + OFFSET["HealthOffset"])
+        result["Pos"] = MemTool.readFloatVector(HANDLE, PID, botInfoAddr + OFFSET["PosOffset"])
+        result["Ang"] = MemTool.readFloatVector(HANDLE, PID, botInfoAddr + OFFSET["AngOffset"])
         return result
 
 
-class PlayerInfo:
+class FOVGetter:
     def __init__(self):
         raise TypeError("此类无法实例化")
 
-    def getData() -> dict | None:
-        data = BotInfo.getData(0)
-        if data is None:
-            return None
-        
+    def getData() -> int | None:
         clientDllAddr = MODULE_ADDR["client.dll"]
-        data["FOV"] = MemTool.readUInt32(HANDLE, PID, clientDllAddr + 0x68D078)
-        return data
+        return MemTool.readUInt32(HANDLE, PID, clientDllAddr + 0x68D078)
 
 
 
@@ -95,9 +99,7 @@ if __name__ == "__main__":
     Init()
     while True:
         time.sleep(1)
-
-        playerInfo = PlayerInfo.getData()
-        print(playerInfo)
+        print(BotInfo.getData(0))
   
   
 

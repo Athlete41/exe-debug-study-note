@@ -250,8 +250,8 @@ def readString(handle, pid, address, size, encoding='ascii') -> str | None:
     若想读取以 null 结尾的字符串，可传递 size 为最大长度（如 256），
     解码时用 split('\x00', 1)[0] 截断。
     """
-    status, data = readBytes(handle, pid, address, size)
-    if status != 0:
+    data = readBytes(handle, pid, address, size)
+    if data is None:
         return None
     try:
         # 寻找第一个 null 字节，若存在则截断
