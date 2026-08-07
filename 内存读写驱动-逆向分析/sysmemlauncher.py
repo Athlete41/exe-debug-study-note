@@ -1,6 +1,6 @@
 """
 Cracker.sys 驱动加载/卸载工具（服务方式）
-通过注册表将驱动注册为系统服务，实现加载和卸载。
+使用 CreateService 直接创建内核驱动服务，避免 InstallService 硬编码 Win32 类型。
 需要管理员权限运行。
 """
 import os
@@ -12,17 +12,13 @@ import win32api
 import winerror
 
 # ---------- 配置 ----------
-SERVICE_NAME = "Cracker"          # 服务名称（注册表项名）
+SERVICE_NAME = "Cracker"
 SERVICE_DISPLAY_NAME = "Cracker Driver Service"
 SERVICE_DESCRIPTION = "Cracker 内核驱动服务"
-
-# 驱动文件路径（请修改为实际路径）
-# 建议将 Cracker.sys 放在脚本同目录下，或使用绝对路径
 DRIVER_PATH = os.path.join(os.path.dirname(__file__), "Cracker.sys")
 
 
 def isAdmin():
-    """检查当前进程是否以管理员权限运行"""
     try:
         return ctypes.windll.shell32.IsUserAnAdmin() != 0
     except:
@@ -30,40 +26,66 @@ def isAdmin():
 
 
 def installDriver():
-    """安装并启动驱动服务"""
-    # 1. 检查驱动文件是否存在
+    """使用 CreateService 创建内核驱动服务并启动"""
     if not os.path.exists(DRIVER_PATH):
         print(f"[-] 驱动文件不存在: {DRIVER_PATH}")
         return False
 
-    # 2. 检查服务是否已存在
+    # 检查服务是否已存在
     try:
         win32serviceutil.QueryServiceStatus(SERVICE_NAME)
-        print(f"[!] 服务 {SERVICE_NAME} 已存在，请先卸载再安装")
+        print(f"[!] 服务 {SERVICE_NAME} 已存在，请先卸载")
         return False
     except win32api.error as e:
         if e.winerror != winerror.ERROR_SERVICE_DOES_NOT_EXIST:
             print(f"[-] 检查服务状态失败: {e}")
             return False
 
-    # 3. 安装服务（适配新版本 InstallService 签名）
+    # 打开服务管理器
     try:
-        print(f"[+] 正在安装服务 {SERVICE_NAME} ...")
-        win32serviceutil.InstallService(
-            pythonClassString=None,               # 对于内核驱动，无需 Python 类
-            serviceName=SERVICE_NAME,
-            displayName=SERVICE_DISPLAY_NAME,
-            startType=win32service.SERVICE_DEMAND_START,  # 手动启动
-            exeName=DRIVER_PATH,                  # 驱动文件路径
-            description=SERVICE_DESCRIPTION,
-            # 其他参数保持默认（errorControl 等）
-        )
-        print(f"[+] 服务 {SERVICE_NAME} 安装成功")
-    except Exception as e:
-        print(f"[-] 安装服务失败: {e}")
+        hScm = win32service.OpenSCManager(None, None, win32service.SC_MANAGER_ALL_ACCESS)
+    except win32api.error as e:
+        print(f"[-] 打开服务管理器失败: {e}")
         return False
 
-    # 4. 启动服务
+    # 创建服务（直接指定 SERVICE_KERNEL_DRIVER）
+    try:
+        print(f"[+] 正在创建服务 {SERVICE_NAME} ...")
+        # 参数顺序依据 pywin32 312 的 CreateService 签名
+        hService = win32service.CreateService(
+            hScm,                              # SC_HANDLE
+            SERVICE_NAME,                      # 服务名
+            SERVICE_DISPLAY_NAME,              # 显示名
+            win32service.SERVICE_ALL_ACCESS,   # 访问权限
+            win32service.SERVICE_KERNEL_DRIVER,  # 【关键】服务类型 = 1
+            win32service.SERVICE_DEMAND_START, # 启动类型：手动
+            win32service.SERVICE_ERROR_NORMAL, # 错误控制
+            DRIVER_PATH,                       # 二进制路径
+            None,                              # 加载顺序组
+            False,                             # 是否获取标签
+            None,                              # 依赖项
+            None,                              # 账户名（本地系统）
+            None                               # 密码
+        )
+        # 设置描述（可选）
+        if SERVICE_DESCRIPTION:
+            win32service.ChangeServiceConfig2(
+                hService,
+                win32service.SERVICE_CONFIG_DESCRIPTION,
+                SERVICE_DESCRIPTION
+            )
+        win32service.CloseServiceHandle(hService)
+        print(f"[+] 服务 {SERVICE_NAME} 创建成功（类型: KERNEL_DRIVER）")
+    except win32api.error as e:
+        if e.winerror == winerror.ERROR_SERVICE_EXISTS:
+            print(f"[!] 服务 {SERVICE_NAME} 已存在，请先卸载")
+        else:
+            print(f"[-] 创建服务失败: {e}")
+        return False
+    finally:
+        win32service.CloseServiceHandle(hScm)
+
+    # 启动服务
     try:
         print(f"[+] 正在启动服务 {SERVICE_NAME} ...")
         win32serviceutil.StartService(SERVICE_NAME)
@@ -79,7 +101,7 @@ def installDriver():
 
 
 def uninstallDriver():
-    """停止并卸载驱动服务"""
+    """停止并卸载驱动服务（完全保持原样）"""
     try:
         win32serviceutil.QueryServiceStatus(SERVICE_NAME)
     except win32api.error as e:
@@ -90,7 +112,6 @@ def uninstallDriver():
             print(f"[-] 检查服务状态失败: {e}")
             return False
 
-    # 停止服务
     try:
         print(f"[+] 正在停止服务 {SERVICE_NAME} ...")
         win32serviceutil.StopService(SERVICE_NAME)
@@ -102,7 +123,6 @@ def uninstallDriver():
             print(f"[-] 停止服务失败: {e}")
             return False
 
-    # 卸载服务
     try:
         print(f"[+] 正在卸载服务 {SERVICE_NAME} ...")
         win32serviceutil.RemoveService(SERVICE_NAME)
@@ -133,7 +153,6 @@ def main():
         sys.exit(0 if success else 1)
     else:
         print(f"[-] 未知操作: {action}")
-        print("支持的操作: install, uninstall")
         sys.exit(1)
 
 

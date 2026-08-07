@@ -121,14 +121,14 @@ def readWriteMemoryMdl(handle, pid, targetAddr, size, localBuf, direction):
                        arg3=localBuf, arg4=direction)
 
 def getModuleBase(handle, pid, moduleNameAnsi):
-    """
-    获取进程内模块基址
-    返回 (status, baseAddress)
-    """
+    """按模块名获取基址，返回 (status, base)"""
     nameBuf = ctypes.create_string_buffer(moduleNameAnsi.encode('ascii'))
-    addr = ctypes.addressof(nameBuf)
-    return deviceIoctl(handle, IOCTL_GET_MODULE_BASE,
-                       arg0=pid, arg1=addr, arg2=0, arg3=0, arg4=0)
+    result = ctypes.c_ulonglong(0)
+    status, _ = deviceIoctl(handle, IOCTL_GET_MODULE_BASE,
+                            arg0=pid,
+                            arg1=ctypes.addressof(nameBuf),
+                            arg3=ctypes.addressof(result))
+    return status, result.value
 
 def getProcAddress(handle, pid, moduleBase, funcNameAnsi):
     """
@@ -159,9 +159,11 @@ def virtualProtect(handle, pid, baseAddr, size, newProtect):
 def getPidByName(handle, processNameAnsi):
     """按进程名获取 PID，返回 (status, pid)"""
     nameBuf = ctypes.create_string_buffer(processNameAnsi.encode('ascii'))
-    addr = ctypes.addressof(nameBuf)
-    return deviceIoctl(handle, IOCTL_GET_PID_BY_NAME,
-                       arg0=addr, arg1=0, arg2=0, arg3=0, arg4=0)
+    result = ctypes.c_ulonglong(0)                     # ← 分配可写内存作为输出槽
+    status, _ = deviceIoctl(handle, IOCTL_GET_PID_BY_NAME,
+                            arg0=ctypes.addressof(nameBuf),
+                            arg3=ctypes.addressof(result))   # ← 传地址，不是 0
+    return status, result.value                         # ← 从 result 读回 PID
 
 def setProtectFlag(handle, pid, flag):
     """flag=0清除，非0设置"""
@@ -200,45 +202,21 @@ def injectDll(handle, pid, dllPathAnsi):
 # ---------- 示例用法 ----------
 if __name__ == "__main__":
     try:
-        # 1. 打开设备
+        # 打开设备
         h = openDevice()
         print("[+] 设备打开成功")
 
-        # 2. 例如：获取 "notepad.exe" 的 PID
-        status, pid = getPidByName(h, "notepad.exe")
-        if status == 0:
-            print(f"[+] notepad.exe PID = {pid}")
-        else:
+        # 例如：获取 "hl.exe" 的 PID
+        status, pid = getPidByName(h, "hl.exe")
+        if status == 0 and pid == 0:
             print(f"[-] 获取 PID 失败，状态 {status}")
+        else:
+            print(f"[+] hl.exe PID = {pid}")
 
-        # 3. 获取模块基址
-        status, base = getModuleBase(h, pid, "notepad.exe")
+        # 获取模块基址
+        status, base = getModuleBase(h, pid, "client.dll")
         if status == 0:
             print(f"[+] 模块基址 = 0x{base:X}")
-
-        # 4. 远程分配内存（64 字节）
-        status, allocAddr = virtualAlloc(h, pid, 64)
-        if status == 0:
-            print(f"[+] 分配内存 0x{allocAddr:X}")
-
-            # 5. 写入数据（本地缓冲地址需提前准备）
-            data = b"Hello from driver!"
-            localBuf = ctypes.create_string_buffer(data)
-            localAddr = ctypes.addressof(localBuf)
-            status, _ = readWriteMemory(h, pid, allocAddr, len(data), localAddr, 1)
-            if status == 0:
-                print("[+] 写入成功")
-            else:
-                print(f"[-] 写入失败，状态 {status}")
-
-            # 6. 释放内存
-            status, _ = virtualFree(h, pid, allocAddr)
-            if status == 0:
-                print("[+] 释放成功")
-
-        # 7. 卸载驱动（可选）
-        # status, _ = unloadDriver(h)
-        # print(f"[+] 卸载状态 {status}")
 
         closeDevice(h)
     except Exception as e:
