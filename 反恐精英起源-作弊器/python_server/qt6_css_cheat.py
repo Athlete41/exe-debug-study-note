@@ -21,7 +21,7 @@ class CSSCheatMainWindow(QWidget):
     Z_NEAR = 0.1
     Z_FAR = 10000.0
 
-    BOT_MAX = 32
+    BOT_MAX = 48
 
     SLIENT = False
     WINDOW_WIDTH = 1600
@@ -80,6 +80,7 @@ class CSSCheatMainWindow(QWidget):
         # 3D canvas
         self.canvas3D = Qt6Numpy3DCanvas(self.content_frame)
         self.canvas3D.setScreen(90.0, self.Z_NEAR, self.Z_FAR)
+        self.canvas3D.setCrosshair(False)
         self.content_layout.addWidget(self.canvas3D)
 
         # Radar canvas
@@ -97,6 +98,7 @@ class CSSCheatMainWindow(QWidget):
         try:
             playerInfo = None
             botList = []
+            playerCount = 0
             for i in range(self.BOT_MAX):
                 botInfo = css_mem_module.BotInfo.getData(i)
                 if botInfo is None:
@@ -106,17 +108,18 @@ class CSSCheatMainWindow(QWidget):
                 if botName is None:
                     continue
 
+                if botName == self.PLAYER_NAME:
+                    playerCount += 1
+                    playerInfo = botInfo
+                    continue
+
                 botTeamType = botInfo["TeamType"]
                 if botTeamType is None or botTeamType == "观察者" or botTeamType == "未知":
                     continue 
-
-                if botName == self.PLAYER_NAME:
-                    playerInfo = botInfo
-                    continue
     
                 botList.append((i, botInfo))
 
-  
+            # print(playerCount, playerInfo)
             if playerInfo is None:
                 return
             

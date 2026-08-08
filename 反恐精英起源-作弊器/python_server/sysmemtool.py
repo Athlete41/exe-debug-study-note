@@ -24,7 +24,6 @@ IOCTL_VIRTUAL_ALLOC = 0x238010
 IOCTL_VIRTUAL_FREE = 0x238014
 IOCTL_VIRTUAL_PROTECT = 0x238018
 IOCTL_GET_PID_BY_NAME = 0x23801C
-IOCTL_SET_PROTECT_FLAG = 0x238020
 IOCTL_TERMINATE_PROCESS = 0x238024
 IOCTL_UNLOAD_DRIVER = 0x238040
 IOCTL_DELETE_FILE = 0x238044
@@ -165,11 +164,6 @@ def getPidByName(handle, processNameAnsi):
                             arg0=ctypes.addressof(nameBuf),
                             arg3=ctypes.addressof(result))   # ← 传地址，不是 0
     return status, result.value                         # ← 从 result 读回 PID
-
-def setProtectFlag(handle, pid, flag):
-    """flag=0清除，非0设置"""
-    return deviceIoctl(handle, IOCTL_SET_PROTECT_FLAG,
-                       arg0=pid, arg1=0, arg2=0, arg3=0, arg4=flag)
 
 def terminateProcess(handle, pid):
     """终止进程"""
