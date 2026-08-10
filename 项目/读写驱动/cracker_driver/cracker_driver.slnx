@@ -1,0 +1,8 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="driver/driver.vcxproj" Id="4c3f2ecb-853d-4095-84b6-a666a122242c" />
+  <Project Path="test/test.vcxproj" Id="242e0692-789b-4cea-b275-82e27b1a79ea" />
+</Solution>

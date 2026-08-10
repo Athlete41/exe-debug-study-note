@@ -2,11 +2,12 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 
 
-def makeTransformFromEuler(translation: np.ndarray = None, euler: np.ndarray = None, seq: str = 'xyz', degrees: bool = True) -> np.ndarray:
+def makeTransformFromEuler(translation: np.ndarray = None, scale: np.ndarray = None, euler: np.ndarray = None, seq: str = 'xyz', degrees: bool = True) -> np.ndarray:
     """
     从平移向量和欧拉角创建4x4变换矩阵。
     参数:
         translation: (3,) ndarray 平移向量
+        scale: (3,) ndarray 缩放向量 (x, y, z)
         euler: (3,) ndarray 欧拉角 (顺序由seq指定)
         seq: str 旋转顺序，默认为'xyz'
         degrees: bool 角度单位是否为度，默认为True
@@ -21,15 +22,19 @@ def makeTransformFromEuler(translation: np.ndarray = None, euler: np.ndarray = N
         assert euler.shape == (3,)
         rot = R.from_euler(seq, euler, degrees=degrees)
         mat[:3, :3] = rot.as_matrix()
+    if scale is not None:
+        assert scale.shape == (3,)
+        mat[:3, :3] = mat[:3, :3] @ np.diag(scale)
     return mat
 
 
-def makeTransformFromQuaternion(translation: np.ndarray = None,
+def makeTransformFromQuaternion(translation: np.ndarray = None, scale: np.ndarray = None,
                                 quaternion: np.ndarray = None) -> np.ndarray:
     """
     从平移向量和四元数创建4x4变换矩阵。
     参数:
         translation: (3,) ndarray 平移向量
+        scale: (3,) ndarray 缩放向量 (x, y, z)
         quaternion: (4,) ndarray 四元数 (x, y, z, w)
     返回:
         (4,4) ndarray 齐次变换矩阵
@@ -42,6 +47,9 @@ def makeTransformFromQuaternion(translation: np.ndarray = None,
         assert quaternion.shape == (4,)
         rot = R.from_quat(quaternion)
         mat[:3, :3] = rot.as_matrix()
+    if scale is not None:
+        assert scale.shape == (3,)
+        mat[:3, :3] = mat[:3, :3] @ np.diag(scale)
     return mat
 
 
@@ -78,8 +86,10 @@ def setEuler(mat: np.ndarray, euler: np.ndarray, seq: str = 'xyz', degrees: bool
         degrees: bool 角度单位是否为度，默认为True
     """
     assert mat.shape == (4, 4) and euler.shape == (3,)
-    rot = R.from_euler(seq, euler, degrees=degrees)
-    mat[:3, :3] = rot.as_matrix()
+    # 提取当前缩放
+    scale = getScale(mat)
+    rot = R.from_euler(seq, euler, degrees=degrees).as_matrix()
+    mat[:3, :3] = rot @ np.diag(scale)
 
 
 def setQuaternion(mat: np.ndarray, quaternion: np.ndarray) -> None:
@@ -90,8 +100,10 @@ def setQuaternion(mat: np.ndarray, quaternion: np.ndarray) -> None:
         quaternion: (4,) ndarray 四元数 (x, y, z, w)
     """
     assert mat.shape == (4, 4) and quaternion.shape == (4,)
-    rot = R.from_quat(quaternion)
-    mat[:3, :3] = rot.as_matrix()
+    # 提取当前缩放
+    scale = getScale(mat)
+    rot = R.from_quat(quaternion).as_matrix()
+    mat[:3, :3] = rot @ np.diag(scale)
 
 
 def setMatrix(mat: np.ndarray, newMat: np.ndarray) -> None:
@@ -104,6 +116,19 @@ def setMatrix(mat: np.ndarray, newMat: np.ndarray) -> None:
     assert mat.shape == (4, 4) and newMat.shape == (4, 4)
     mat[:] = newMat
 
+def setScale(mat: np.ndarray, scale: np.ndarray) -> None:
+    """
+    就地设置变换矩阵的缩放部分。
+    参数:
+        mat: (4,4) ndarray 变换矩阵
+        scale: (3,) ndarray 新的缩放向量
+    """
+    assert mat.shape == (4, 4) and scale.shape == (3,)
+    U, s, Vh = np.linalg.svd(mat[:3, :3], full_matrices=False)
+    Rmat = U @ Vh
+    if np.linalg.det(Rmat) < 0:
+        Rmat = -Rmat
+    mat[:3, :3] = Rmat @ np.diag(scale)
 
 def getTranslation(mat: np.ndarray) -> np.ndarray:
     """
@@ -140,6 +165,18 @@ def getQuaternion(mat: np.ndarray) -> np.ndarray:
     """
     rot = R.from_matrix(mat[:3, :3])
     return rot.as_quat()
+
+def getScale(mat: np.ndarray) -> np.ndarray:
+    """
+    从变换矩阵提取缩放向量。
+    参数:
+        mat: (4,4) ndarray 变换矩阵
+    返回:
+        (3,) ndarray 缩放向量 (x, y, z)
+    """
+    assert mat.shape == (4, 4)
+    _, s, _ = np.linalg.svd(mat[:3, :3], full_matrices=False)
+    return s
 
 
 def applyRotationByEuler(mat: np.ndarray, euler: np.ndarray, seq: str = 'xyz', degrees: bool = True) -> None:
@@ -236,3 +273,99 @@ def getInverseFast(mat: np.ndarray) -> np.ndarray | None:
         return inv
     except AttributeError:
         return None
+
+def getForward(mat: np.ndarray) -> np.ndarray:
+    """
+    从变换矩阵提取前向向量。
+    参数:
+        mat: (4,4) ndarray 变换矩阵
+    返回:
+        (3,) ndarray 前向向量
+    """
+    v = mat[:3, 0]
+    norm = np.linalg.norm(v)
+    if norm > 0:
+        return v / norm
+    return np.array([1., 0., 0.])
+
+def getRight(mat: np.ndarray) -> np.ndarray:
+    """
+    从变换矩阵提取右向向量。
+    参数:
+        mat: (4,4) ndarray 变换矩阵
+    返回:
+        (3,) ndarray 右向向量
+    """
+    v = mat[:3, 1]
+    norm = np.linalg.norm(v)
+    if norm > 0:
+        return -v / norm
+    return np.array([0., -1., 0.])
+
+def getUp(mat: np.ndarray) -> np.ndarray:
+    """
+    从变换矩阵提取上向向量。
+    参数:
+        mat: (4,4) ndarray 变换矩阵
+    返回:
+        (3,) ndarray 上向向量
+    """
+    v = mat[:3, 2]
+    norm = np.linalg.norm(v)
+    if norm > 0:
+        return v / norm
+    return np.array([0., 0., 1.])
+
+
+def getForwardFromEuler(ang: np.ndarray, seq: str = 'xyz', degrees: bool = True) -> np.ndarray:
+    """
+    从欧拉角提取前向向量。
+    参数:
+        ang: (3,) ndarray 欧拉角
+    返回:
+        (3,) ndarray 前向向量
+    """
+    rot = R.from_euler(seq, ang, degrees=degrees).as_matrix()
+    return rot[:, 0]
+
+
+def getRightFromEuler(ang: np.ndarray, seq: str = 'xyz', degrees: bool = True) -> np.ndarray:
+    """
+    从欧拉角提取右向向量。
+    参数:
+        ang: (3,) ndarray 欧拉角
+    返回:
+        (3,) ndarray 右向向量
+    """
+    rot = R.from_euler(seq, ang, degrees=degrees).as_matrix()
+    return -rot[:, 1]
+
+
+def getUpFromEuler(ang: np.ndarray, seq: str = 'xyz', degrees: bool = True) -> np.ndarray:
+    """
+    从欧拉角提取上向向量。
+    参数:
+        ang: (3,) ndarray 欧拉角
+    返回:
+        (3,) ndarray 上向向量
+    """
+    rot = R.from_euler(seq, ang, degrees=degrees).as_matrix()
+    return rot[:, 2]
+
+
+
+if __name__ == '__main__':
+    transform = makeTransformFromEuler(translation=np.array([10, 5, 7]), scale=np.array([2, 2, 2]), euler=np.array([30, 0, 0]))
+    print(transform)
+    print(getForward(transform), getRight(transform), getUp(transform))
+    print(getForwardFromEuler(getEuler(transform)), getRightFromEuler(getEuler(transform)), getUpFromEuler(getEuler(transform)))
+    print(getTranslation(transform), getScale(transform), getEuler(transform))
+
+    print('===========')
+    setTranslation(transform, np.array([20, 50, 70]))
+    setScale(transform, np.array([1, 1, 1]))
+    setEuler(transform, np.array([30, 0, 0]))
+    print(transform)
+    print(getForward(transform), getRight(transform), getUp(transform))
+    print(getForwardFromEuler(getEuler(transform)), getRightFromEuler(getEuler(transform)), getUpFromEuler(getEuler(transform)))
+    print(getTranslation(transform), getScale(transform), getEuler(transform))
