@@ -15,7 +15,7 @@ import winerror
 SERVICE_NAME = "Cracker"
 SERVICE_DISPLAY_NAME = "Cracker Driver Service"
 SERVICE_DESCRIPTION = "Cracker 内核驱动服务"
-DRIVER_PATH = os.path.join(os.path.dirname(__file__), "Cracker.sys")
+DRIVER_PATH = os.path.join(os.path.dirname(__file__), "cracker.sys")
 
 
 def isAdmin():

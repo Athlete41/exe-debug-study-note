@@ -1,4 +1,5 @@
 ﻿#include "cracker_client.hpp"
+#include "cracker_installer.hpp"
 #include <iostream>
 #include <iomanip>
 #include <array>
@@ -34,6 +35,24 @@ static std::optional<std::array<float, 3>> readVec3(cracker::CrackerClient& clie
 }
 
 int main() {
+
+    if (cracker_installer::UninstallDriver()) {
+        std::cout << "[+] Device uninstall successfully." << std::endl;
+    }
+    else {
+        std::cerr << "[-] Failed to uninstall driver." << std::endl;
+        return 1;
+    }
+
+    if (cracker_installer::InstallDriver()) {
+        std::cout << "[+] Device install successfully." << std::endl;
+    }
+    else {
+        std::cerr << "[-] Failed to install driver." << std::endl;
+        return 1;
+    }
+
+
     cracker::CrackerClient client;
 
     if (!client.open()) {
