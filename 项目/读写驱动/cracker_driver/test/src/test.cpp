@@ -5,6 +5,8 @@
 #include <array>
 #include <cstring>
 #include <optional>
+#include <thread>
+#include <chrono>
 
 // 辅助：读取 uint32_t
 static std::optional<std::uint32_t> readUInt32(cracker::CrackerClient& client,
@@ -34,25 +36,7 @@ static std::optional<std::array<float, 3>> readVec3(cracker::CrackerClient& clie
     return std::nullopt;
 }
 
-int main() {
-
-    if (cracker_installer::UninstallDriver()) {
-        std::cout << "[+] Device uninstall successfully." << std::endl;
-    }
-    else {
-        std::cerr << "[-] Failed to uninstall driver." << std::endl;
-        return 1;
-    }
-
-    if (cracker_installer::InstallDriver()) {
-        std::cout << "[+] Device install successfully." << std::endl;
-    }
-    else {
-        std::cerr << "[-] Failed to install driver." << std::endl;
-        return 1;
-    }
-
-
+static int test() {
     cracker::CrackerClient client;
 
     if (!client.open()) {
@@ -158,14 +142,52 @@ int main() {
     }
 
     // 6. (可选) 终止进程，默认注释掉
-     std::uint64_t termStatus = client.terminateProcess(pid);
-     if (termStatus == 0) {
-         std::cout << "[+] Process terminated." << std::endl;
-     } else {
-         std::cerr << "[-] Terminate failed with status: 0x" << std::hex << termStatus << std::dec << std::endl;
-     }
+    //std::uint64_t termStatus = client.terminateProcess(pid);
+    //if (termStatus == 0) {
+    //    std::cout << "[+] Process terminated." << std::endl;
+    //}
+    //else {
+    //    std::cerr << "[-] Terminate failed with status: 0x" << std::hex << termStatus << std::dec << std::endl;
+    //}
 
     client.close();
-    std::cout << "[+] Done." << std::endl;
     return 0;
+}
+
+
+int main() {
+
+    if (cracker_installer::UninstallDriver()) {
+        std::cout << "[+] Device uninstall successfully." << std::endl;
+    }
+    else {
+        std::cerr << "[-] Failed to uninstall driver." << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        return 1;
+    }
+
+    if (cracker_installer::InstallDriver()) {
+        std::cout << "[+] Device install successfully." << std::endl;
+    }
+    else {
+        std::cerr << "[-] Failed to install driver." << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        return 1;
+    }
+
+
+    const int status = test();
+
+    if (cracker_installer::UninstallDriver()) {
+        std::cout << "[+] Device uninstall successfully." << std::endl;
+    }
+    else 
+    {
+        std::cerr << "[-] Failed to uninstall driver." << std::endl;
+    }
+
+    std::cout << "[+] Done." << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+    return status;
+
 }

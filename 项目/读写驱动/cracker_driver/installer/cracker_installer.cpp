@@ -11,14 +11,14 @@ namespace {
     // 获取驱动释放路径：优先 exe 同目录，失败则回退到 Temp
     std::wstring GetDriverOutputPath(const std::wstring& outputDir) {
         if (!outputDir.empty()) {
-            return outputDir + L"\\cracker_enc.sys";
+            return outputDir + L"\\cracker.sys";
         }
 
         wchar_t exePath[MAX_PATH];
         GetModuleFileNameW(NULL, exePath, MAX_PATH);
         std::wstring dir = exePath;
         dir = dir.substr(0, dir.find_last_of(L"\\"));
-        std::wstring fullPath = dir + L"\\cracker_enc.sys";
+        std::wstring fullPath = dir + L"\\cracker.sys";
 
         // 测试 exe 目录是否可写
         HANDLE test = CreateFileW(fullPath.c_str(), GENERIC_WRITE, 0, NULL,
@@ -32,7 +32,7 @@ namespace {
         // 不可写则用系统临时目录
         wchar_t tempPath[MAX_PATH];
         GetTempPathW(MAX_PATH, tempPath);
-        return std::wstring(tempPath) + L"cracker_enc.sys";
+        return std::wstring(tempPath) + L"cracker.sys";
     }
 
     bool WriteDriverFromMemory(const std::wstring& outputPath) {
