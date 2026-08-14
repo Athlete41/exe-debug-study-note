@@ -1,4 +1,4 @@
-﻿# 获取脚本所在目录（即项目目录）
+﻿# 获取脚本所在目录
 $ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 if (-not $ProjectDir.EndsWith('\')) {
     $ProjectDir += '\'
@@ -33,7 +33,12 @@ try {
     [System.IO.File]::WriteAllBytes($encSys, $enc)
     Write-Host "cracker_enc.sys generated, size: $($enc.Length) bytes" -ForegroundColor Green
 
-    # 3. 生成 C++ 数组文件
+    # 3. 计算 MD5 哈希（对原始明文）
+    $md5 = [System.Security.Cryptography.MD5]::Create()
+    $hashBytes = $md5.ComputeHash($plain)
+    $hashString = [System.BitConverter]::ToString($hashBytes) -replace '-', ''  # 转大写十六进制
+
+    # 4. 生成 C++ 数组文件
     Write-Host "Generating driver_data.cpp ..."
     $hexString = ($enc | ForEach-Object { '0x{0:X2}, ' -f $_ }) -join ''
     if ($hexString.Length -gt 2) {
@@ -52,11 +57,15 @@ namespace cracker_installer {
         $hexString
     };
     static const size_t kDriverDataSize = $($enc.Length);
+
+    // MD5 hash of original driver file (in uppercase hex)
+    static const char* kDriverHash = "$hashString";
 } // namespace cracker_installer
 "@
 
     [System.IO.File]::WriteAllText($arrayCpp, $cppContent, [System.Text.Encoding]::UTF8)
     Write-Host "driver_data.cpp generated successfully" -ForegroundColor Green
+    Write-Host "MD5 Hash: $hashString" -ForegroundColor Cyan
     exit 0
 }
 catch {
