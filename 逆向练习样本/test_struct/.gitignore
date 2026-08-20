@@ -1,0 +1,70 @@
+# 编译输出
+*.obj
+*.exe
+*.dll
+*.lib
+*.exp
+*.ilk
+*.pdb
+*.idb
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.log
+
+# 静态库/动态库
+*.a
+*.so
+*.dylib
+
+# 调试符号
+*.pdb
+*.map
+
+# Visual Studio 文件
+.vs/
+*.vcxproj.user
+*.vcxproj.filters
+*.sln.docstates
+*.suo
+*.user
+*.opensdf
+*.sdf
+
+# 编译生成目录（按你的项目结构）
+Debug/
+Release/
+x64/
+x86/
+build/
+out/
+bin/
+lib/
+obj/
+
+# 依赖管理 / 包缓存
+packages/
+.vcpkg/
+conaninfo.txt
+conanbuildinfo.*
+CMakeUserPresets.json
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+
+# 测试覆盖
+*.gcov
+*.gcda
+*.gcno
+*.prof
+*.raw
+
+# 其他临时文件
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
