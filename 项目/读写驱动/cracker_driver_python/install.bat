@@ -5,5 +5,5 @@ if errorlevel 1 (
     exit /b
 )
 cd /d "%~dp0"
-python driver_loader.py install --path "%~dp0cracker.sys" --desc "某服务"
+python cracker_installer.py install --path "%~dp0cracker.sys" --desc "某服务"
 pause

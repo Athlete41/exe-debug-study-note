@@ -5,5 +5,5 @@ if errorlevel 1 (
     exit /b
 )
 cd /d "%~dp0"
-python driver_loader.py uninstall --path "%~dp0cracker.sys"
+python cracker_installer.py uninstall --path "%~dp0cracker.sys"
 pause
